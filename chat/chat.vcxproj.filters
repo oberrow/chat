@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\Users\omark\Code\Chat\chat_client\chat_client.c">
+    <ClCompile Include="chat_client.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
