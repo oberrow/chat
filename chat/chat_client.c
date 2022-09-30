@@ -20,7 +20,7 @@ BOOL UnicodeToMByte(LPCWSTR unicodeStr,   LPSTR  multiByteStr,  DWORD size);
 SSL_CTX *create_context();
 static int always_true_callback(X509_STORE_CTX* ctx, void* arg)
 {
-    return 1;
+    return 0;
 }
 
 SOCKET g_Server;
