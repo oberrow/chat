@@ -14,7 +14,7 @@
 #define SERROR INVALID_SOCKET
 
 
-void Receiver();
+void Sender();
 BOOL MByteToUnicode(LPCSTR  multiByteStr, LPWSTR unicodeStr,    DWORD size);
 BOOL UnicodeToMByte(LPCWSTR unicodeStr,   LPSTR  multiByteStr,  DWORD size);
 SSL_CTX *create_context();
@@ -95,63 +95,25 @@ int main(int argc, char **argv, char **envp)
         shutdown(g_Server, SD_BOTH);
         return err;
     }
-    wchar_t* buf = calloc(512 * sizeof(wchar_t), sizeof(wchar_t));
-    char* mbBuf = calloc(512, 1);
-    auto threadHandle = _beginthread(Receiver, 0, NULL);
-    DWORD dwBytesRead = 0;
+    auto threadHandle = _beginthread(Sender, 0, NULL);
     setlocale(LC_ALL, "");
     wchar_t ch = L'\0';
-    int index = 0;
-    while(!g_End)
-    {
-        memset(buf, '\0', 512);
-        ReadConsoleW(GetStdHandle(STD_INPUT_HANDLE), buf, 512 * sizeof(TCHAR), &dwBytesRead, NULL);
-        buf[wcslen(buf) - 2] = 0; // Null terminates the CRLF of the inputed string
-        UnicodeToMByte(buf, mbBuf, 512);
-        ret = SSL_write(g_ServerSSL, mbBuf, wcslen(mbBuf));
-        if(ret <= 0)
-        {
-            err = SSL_get_error(g_ServerSSL, err);
-            printf("SSL_write failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d", err, __LINE__);
-            if (err == SSL_ERROR_SYSCALL)
-            {
-                err = WSAGetLastError();
-                if (err == 0)
-                    perror("err = SSL_ERROR_SYSCALL");
-               else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
-                g_End = true;
-                return err;
-            }
-            g_End = true;
-            shutdown(g_Server, SD_BOTH);
-            return err;
-        }
-    }
-    shutdown(g_Server, SD_BOTH);
-    free(buf);
-    free(mbBuf);
-    return 0;
-}
-
-void Receiver()
-{
-    int err = 0, ret = 0;
     char* buf = calloc(512, 1);
     wchar_t* unicodeBuf = calloc(512 * sizeof(wchar_t), sizeof(wchar_t));
-    while(!g_End)
+    while (!g_End)
     {
         memset(buf, '\0', 512);
         ret = SSL_read(g_ServerSSL, buf, strlen(buf));
-        if(ret <= 0)
+        if (ret <= 0)
         {
             err = SSL_get_error(g_ServerSSL, ret);
             printf("SSL_read failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d", err, __LINE__);
             if (err == SSL_ERROR_SYSCALL)
             {
-                err = WSAGetLastError();
+                err = GetLastError();
                 if (err == 0)
-                    perror("err = SSL_ERROR_SYSCALL");
-                else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+                    perror("\nerr = SSL_ERROR_SYSCALL");
+                else printf("\nerr = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
                 g_End = true;
                 ExitThread(-1);
             }
@@ -162,7 +124,47 @@ void Receiver()
         MByteToUnicode(buf, unicodeBuf, 512);
         wprintf(L"%ls \n", unicodeBuf);
     }
-    _endthread();
+    shutdown(g_Server, SD_BOTH);
+    free(buf);
+    return 0;
+}
+
+void Sender()
+{
+    wchar_t* buf = calloc(512 * sizeof(wchar_t), sizeof(wchar_t));
+    char* mbBuf = calloc(512, 1);
+    int ret = 0, err = 0;
+    DWORD dwBytesRead = 0;
+    int index = 0;
+    while (!g_End)
+    {
+        memset(buf, '\0', 512);
+        ReadConsoleW(GetStdHandle(STD_INPUT_HANDLE), buf, 512 * sizeof(TCHAR), &dwBytesRead, NULL);
+        buf[wcslen(buf) - 2] = 0; // Null terminates the CRLF of the inputed string
+        UnicodeToMByte(buf, mbBuf, 512);
+        ret = SSL_write(g_ServerSSL, mbBuf, wcslen(mbBuf));
+        if (ret <= 0)
+        {
+            err = SSL_get_error(g_ServerSSL, err);
+            printf("SSL_write failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d", err, __LINE__);
+            if (err == SSL_ERROR_SYSCALL)
+            {
+                err = WSAGetLastError();
+                if (err == 0)
+                    perror("err = SSL_ERROR_SYSCALL");
+                else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+                g_End = true;
+                break;
+            }
+            g_End = true;
+            shutdown(g_Server, SD_BOTH);
+            break;
+        }
+    }
+    end:
+    free(buf);
+    free(mbBuf);
+    ExitThread(err);
 }
 // Next 2 functions : https://social.msdn.microsoft.com/Forums/vstudio/en-US/41f3fa1c-d7cd-4ba6-a3bf-a36f16641e37/conversion-from-multibyte-to-unicode-character-set
 BOOL MByteToUnicode(LPCSTR multiByteStr, LPWSTR unicodeStr, DWORD size)

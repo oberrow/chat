@@ -30,14 +30,77 @@ SSL_CTX*             g_Ctx;
 
 
 void ClientHandler();
+bool ParameterHandler(enum paramflags* flag, int element, void** parameters);
 BOOL MByteToUnicode(LPCSTR  multiByteStr, LPWSTR unicodeStr,    DWORD size);
 BOOL UnicodeToMByte(LPCWSTR unicodeStr,   LPSTR  multiByteStr,  DWORD size);
 // Next 2 functions taken from https://wiki.openssl.org/index.php/Simple_TLS_Server
 SSL_CTX *create_context();
 void configure_context(SSL_CTX *ctx);
 
+enum paramflags
+{
+    DEFAULT, // default flag
+    READ, // Start reading from the next argument
+    FPORT, // --port was specified
+    FIP, // --ip was specified
+    FCERTFNAME, // --certificate_fname certificate file path
+    FPRIVATEKEYFNAME, // --privatekey_fname
+    FHELP, // --help, -h
+    INVALID // an invalid option was specified
+};
+
 int main(int argc, char **argv, char **envp)
 {
+    enum paramflags par = DEFAULT;
+    int port = 443;
+    char* ip = malloc(16);
+    char* certname = malloc(MAX_PATH + 1);
+    char* privkeyname = malloc(MAX_PATH + 1);
+    void** args = calloc(sizeof(void*), sizeof(void*));
+    for (int i = 1; i < argc; i++)
+    {
+        if (par == READ) 
+          { par = DEFAULT; continue; }
+        char* element = argv[i];
+        if (_stricmp(element, "--port") == 0)
+        {
+            par = FPORT;
+            args[0] = &port;
+            ParameterHandler(&par, i, args);
+        }
+        else if (_stricmp(element, "--ip") == 0)
+        {
+            par = FIP;
+            args[0] = ip;
+            ParameterHandler(&par, i, args);
+        }
+        else if (_stricmp(element, "--certificate_fname") == 0)
+        {
+            par = FCERTFNAME;
+            args[0] = certname;
+            ParameterHandler(&par, i, args);
+        }
+        else if (_stricmp(element, "--privatekey_fname") == 0) 
+        {
+            par = FPRIVATEKEYFNAME;
+            args[0] = privkeyname;
+            ParameterHandler(&par, i, args);
+        }
+        else if (_stricmp(element, "--help") == 0 || _stricmp(element, "-h") == 0)
+        { 
+            par = FPRIVATEKEYFNAME;
+            ParameterHandler(&par, i, argv, NULL);
+            return 0;
+        }
+        else
+        {
+            printf("You entered an invalid parameter! Parameter was : %s\n", element);
+            par = INVALID;
+            ParameterHandler(&par, i, argv, NULL);
+            return 1;
+        }
+    }
+    free(args);
     if(SSL_library_init() < 0)
     {
         ERR_print_errors_fp(stderr);
@@ -140,7 +203,7 @@ void ClientHandler()
     // gets the current client's socket handle / ssl connection hopefully before a new client connects
     SOCKET thisClient =  g_ClientSocket;
     SSL* ssl          =  g_Con_SSL;
-    char* buf = calloc(512, 1);
+    char* buf = calloc(512, sizeof(char));
     int ret = 0, err = 0;
     puts("Client connected!");
     ret = SSL_accept(ssl);
@@ -149,21 +212,29 @@ void ClientHandler()
         err = SSL_get_error(ssl, ret);
         printf("SSL_accept failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
         shutdown(thisClient, SD_BOTH);
-        free(buf);
         goto end;
     }
     puts("SSL initalized!");
     while(true)
     {
         memset(buf, '\0', 512);
-        if(SSL_read(ssl, buf, 512) <= 0)
+        ret = SSL_read(ssl, buf, 512);
+        if(ret <= 0)
         {
             err = SSL_get_error(ssl, ret);
             printf("SSL_read failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
+            if (err == SSL_ERROR_SYSCALL)
+            {
+                err = WSAGetLastError();
+                if (err == 0)
+                    perror("err = SSL_ERROR_SYSCALL");
+                else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+                break;
+            }
             shutdown(thisClient, SD_BOTH);
-            free(buf);
             break;
         }
+        // Send it to all the clients
         for(int i = 0; i < g_Clients_SSL.sslListSize; i++)
         {
             if(SSL_write(g_Clients_SSL.sslList[i], buf, strlen(buf)) <= 0)
@@ -176,6 +247,41 @@ void ClientHandler()
     puts("Closed connection to client!");
     free(buf);
     ExitThread(err);
+}
+bool ParameterHandler(enum paramflags* flag, int i, void** parameters)
+{
+    char** argv = __argv;
+    switch (*flag)
+    {
+    case DEFAULT:
+        return false;
+    case FPORT:
+        parameters[0] = argv[i + 1];
+        *flag = READ;
+        break;
+    case FIP:
+        parameters[0] = argv[i + 1];
+        *flag = READ;
+        break;
+    case FCERTFNAME:
+        parameters[0] = argv[i + 1];
+        *flag = READ;
+        break;
+    case FPRIVATEKEYFNAME:
+        parameters[0] = argv[i + 1];
+        *flag = READ;
+        break;
+    case FHELP:
+        help:
+        printf("Commands are: \n--port - the port to be used\n--ip the ip the server should bind to\n--certificate_fname - the certificate filename\n--privatekey_fname - the private key's filename\n--help, -h show this menu\nNote: if none of these arguments are used server will bind to\nlocalhost:443 and will try to read cert.pem and key.pem\n");
+        break;
+    case INVALID:
+        goto help;
+        break;
+    default:
+        break;
+    }
+    return true;
 }
 // Next 2 functions : https://social.msdn.microsoft.com/Forums/vstudio/en-US/41f3fa1c-d7cd-4ba6-a3bf-a36f16641e37/conversion-from-multibyte-to-unicode-character-set
 BOOL MByteToUnicode(LPCSTR multiByteStr, LPWSTR unicodeStr, DWORD size)
