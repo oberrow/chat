@@ -62,6 +62,7 @@ enum paramflags
 int main(int argc, char **argv, char **envp)
 {
     FILE* file = fopen("credentials.txt", "r");
+    if (file == NULL) return ERROR_FILE_NOT_FOUND;
     GetClientIdsFromFile(file);
     fclose(file);
     SetConsoleCtrlHandler(HandlerRoutine, TRUE);
