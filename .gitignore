@@ -365,3 +365,5 @@ FodyWeavers.xsd
 # keys/certificates
 key.pem
 cert.pem
+/chat/credentials_cli.txt
+/chat_server/credentials.txt

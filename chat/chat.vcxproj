@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\other_libraries\c-vector\vec.c" />
     <ClCompile Include="chat_client.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -108,13 +109,14 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Code\vcpkg\packages\openssl_x64-windows\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Code\other_libraries\uthash\src;C:\Users\omark\Downloads\phc-winner-argon2-20190702\include;C:\Code\other_libraries\c-vector;C:\Code\vcpkg\packages\openssl_x64-windows\include</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <AdditionalOptions>"C:\Code\other_libraries\c-vector\vec.c" %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libcrypto.lib";"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libssl.lib";%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libcrypto.lib";"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libssl.lib";"C:\Users\omark\Downloads\phc-winner-argon2-20190702\vs2015\build\Argon2OptDll.lib";%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

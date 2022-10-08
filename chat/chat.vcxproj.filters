@@ -18,5 +18,8 @@
     <ClCompile Include="chat_client.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\other_libraries\c-vector\vec.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
