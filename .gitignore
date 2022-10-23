@@ -367,3 +367,5 @@ key.pem
 cert.pem
 /chat/credentials_cli.txt
 /chat_server/credentials.txt
+# Salt files
+/chat_server/salt.bin
