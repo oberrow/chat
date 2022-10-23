@@ -1,0 +1,3 @@
+string ip = 127.0.0.1
+string theme = dark
+int port = 443

@@ -35,7 +35,7 @@ int main(int argc, char **argv, char **envp)
     SSL_load_error_strings();
     ERR_load_crypto_strings();
     int ret = 0, err = 0;
-    if(SSL_library_init() < 0)
+    if (SSL_library_init() < 0)
     {
         err = SSL_get_error(g_ServerSSL, ret);
         printf("SSL_library_init failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d", err, __LINE__);

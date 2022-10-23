@@ -18,17 +18,12 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\other_libraries\c-vector\vec.c" />
-    <ClCompile Include="chat_client.c" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{8e862f43-dbba-48db-b576-7ba7a80d12b4}</ProjectGuid>
-    <RootNamespace>chat</RootNamespace>
+    <ProjectGuid>{52d416d7-0292-47a9-b15b-3949b1788d9c}</ProjectGuid>
+    <RootNamespace>chatclientgui</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>chat_client</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -109,12 +104,12 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Code\other_libraries\Nuklear;C:\Code\other_libraries\uthash\src;C:\Users\omark\Downloads\phc-winner-argon2-20190702\include;C:\Code\other_libraries\c-vector;C:\Code\vcpkg\packages\openssl_x64-windows\include</AdditionalIncludeDirectories>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalOptions>"C:\Code\other_libraries\c-vector\vec.c" %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>C:\Code\other_libraries\keychain-1.2.0\include\keychain;C:\Code\vcpkg\packages\wxwidgets_x64-windows-static\include;C:\Users\omark\Downloads\phc-winner-argon2-20190702\include;C:\Code\vcpkg\packages\openssl_x64-windows\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libcrypto.lib";"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libssl.lib";"C:\Users\omark\Downloads\phc-winner-argon2-20190702\vs2015\build\Argon2OptDll.lib";%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
@@ -127,16 +122,41 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Code\other_libraries\Nuklear;C:\Code\vcpkg\packages\openssl_x64-windows\include;C:\Users\omark\Downloads\phc-winner-argon2-20190702\include;C:\Code\other_libraries\c-vector;C:\Code\other_libraries\uthash\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Code\other_libraries\keychain-1.2.0\include\keychain;C:\Code\vcpkg\packages\wxwidgets_x64-windows-static\include;C:\Users\omark\Downloads\phc-winner-argon2-20190702\include;C:\Code\vcpkg\packages\openssl_x64-windows\include</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libcrypto.lib";"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libssl.lib";"C:\Users\omark\Downloads\phc-winner-argon2-20190702\vs2015\build\Argon2OptDll.lib";%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libcrypto.lib";"C:\Code\vcpkg\packages\openssl_x64-windows\lib\libssl.lib";"C:\Users\omark\Downloads\phc-winner-argon2-20190702\vs2015\build\Argon2OptDll.lib";"C:\Code\vcpkg\packages\wxwidgets_x64-windows-static\lib\wxmsw32u_core.lib";%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\other_libraries\keychain-1.2.0\src\keychain_win.cpp" />
+    <ClCompile Include="application.cpp" />
+    <ClCompile Include="chat-client-gui.cpp">
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NO_EVENT_DEFINE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NO_EVENT_DEFINE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="Password.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="application.h" />
+    <ClInclude Include="config.hpp" />
+    <ClInclude Include="Password.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="wxWidgets_includes.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Resource.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="bitmap2.bmp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
