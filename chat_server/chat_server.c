@@ -350,6 +350,7 @@ void ClientHandler()
             EchoMessage(joinMsg, sz);
             printf_s("%s\n", joinMsg);
             fprintf_s(chatlog, "%s\n", joinMsg);
+            CloseDB(db);
             fflush(chatlog);
             free(joinMsg);
             joinedMsg = true;
@@ -466,7 +467,6 @@ void ClientHandler()
         sprintf_s(msg, msgSize, "[%s] %s", username, buf);
         // Send it to all the clients
         EchoMessage(msg, strlen(msg));
-        CloseDB(db);
         printf_s("%s\n", msg);
         fprintf_s(chatlog, "%s\n", msg);
         fflush(chatlog);
@@ -584,7 +584,7 @@ bool ParameterHandler(enum paramflags* flag, int i, char** str1, int* int1)
         break;
     case FHELP:
         help:
-        printf(
+        puts(
 "Commands are: \n--port - the port to be used\n--ip the ip the server should bind to\n--certificate_fname - the certificate filename\
 \n--privatekey_fname - the private key's filename\n--help, -h show this menu\n--credentials_fname the filename of where the credentials of clients are stored\
 \nNote: if none of these arguments are specified the server will bind to\nlocalhost:443 and will try to use cert.pem and key.pem and credentials.txt\n");
