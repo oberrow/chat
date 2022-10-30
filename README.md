@@ -9,8 +9,13 @@ Open a command prompt window in the directory that chat_server is in
 <br>Type in chat_server
 `C:/chat_server>chat_server`
 <br>Click enter
+<br>It will crash
+<br>To fix the crash type `chat_server --make_salt`
+`C:/chat_server/chat_server --make_salt`
+<br>Type in chat_server again
+`C:/chat_server/chat_server`
 <br>You will see that it says 'Listening on port 443!'
-```
+
 C:/chat_server>chat_server
 Listening on port 443!
 ```
