@@ -7,17 +7,18 @@ chat server and client coded in c*
 Open a command prompt window in the directory that chat_server is in
 `C:/chat_server>`
 <br>Type in chat_server
-`C:/chat_server>chat_server`
+<br>`C:/chat_server>chat_server`
 <br>Click enter
 <br>It will crash
 <br>To fix the crash type `chat_server --make_salt`
 <br>`C:/chat_server/chat_server --make_salt`
 <br>Type in chat_server again
-`C:/chat_server/chat_server`
+<br>`C:/chat_server/chat_server`
 <br>You will see that it says 'Listening on port 443!'
-
+```
 C:/chat_server>chat_server
 Listening on port 443!
+```
 It binds to the ip localhost:443 by default if you want to change that then use the command line argument --ip <br> Syntax: `--ip [ip address to bind to]`<br> Notes: The ip **must** be in numerical form (eg. 163.445.91.34)
 <br>To change the port it binds to use the command line argument --port<br>Syntax: `--port [port to bind to]`
 <br>Use `--help` or `-h` for more command line arguments
