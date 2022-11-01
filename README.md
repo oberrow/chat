@@ -38,3 +38,31 @@ string ip = [server ip in numerical form]
 string theme = [dark|black]
 int port = [server port]
 ```
+# The Chat Protocol
+## Intial connection:
+### Inital Message
+<br>The client sends it's protocol version and the server checks it to see if it matches
+### Response
+<br>An error code will be sent if the check fails
+<br>If the client protocol version > then the server protocol version then it sends `CHAT_ERROR_SERVER_VERSION_OUTDATED (-60001)`
+<br>If the client protocol version < then the server protocol version then it sends `CHAT_ERROR_CLIENT_VERSION_OUTDATED (-60000)`
+<br>Otherwise, it will send `CHAT_PROTOCOL_VERSION_MATCH` and the connection can proceed.
+## Signing in
+### Inital Message
+When the client wants to sign in it sends `CHAT_PROTOCOL_SIGNIN` and then the server will wait for the username and the password.
+<br>The client will then send the username and password and the server will compare the hashed value of the password to the hashed password in the database.
+### Response
+If the sign in suceeds the server will send `CHAT_PROTOCOL_AUTHENTICATED`.
+Otherwise an error code is sent.
+`CHAT_PROTOCOL_INVALID_PASSWORD` is sent when the user exists but the password is incorrect.
+`CHAT_PROTOCOL_DOESNT_EXIST` is sent when no user exists with the username.
+## Signing up
+### Inital Message
+When the client wants to sign up for a new account it sends `CHAT_PROTOCOL_SIGNUP` and then the server will wait for the username and password
+<br>The client will then send the username and password and the server will attempt to make a new account with that username.
+### Response
+If the sign up suceeds no message will be sent by the server.
+Otherwise, an error message is sent.
+`CHAT_PROTOCOL_ALREADY_EXISTS` is sent when the account you are attempting to create already exists.
+## Other info about the protocol will be listed below
+<br>...
