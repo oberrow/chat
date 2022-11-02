@@ -9,8 +9,17 @@
 #include <openssl\err.h>
 #include <map.h>
 #include "dbInterface.h"
+#include "User.h"
 
 #pragma comment(lib, "Ws2_32.lib")
+
+// Chat Protocol Version
+// Changes with every protocol change
+#define PROTOCOL_VERSION 0x02ui8
+// The client is outdated
+#define ERROR_CLIENT_VERSION_OUTDATED -60000i64
+// The server is outdated
+#define ERROR_SERVER_VERSION_OUTDATED -60001i64
 
 #define SERROR INVALID_SOCKET
 
@@ -38,6 +47,9 @@ bool ParameterHandler(enum paramflags* flag, int element, char** str1, int* int1
 BOOL MByteToUnicode(LPCSTR  multiByteStr, LPWSTR unicodeStr,    DWORD size);
 BOOL UnicodeToMByte(LPCWSTR unicodeStr,   LPSTR  multiByteStr,  DWORD size);
 void GetSaltFromFile(FILE* stream);
+const char* ParseStructIntoString(ClientData c, int* len);
+ClientData  ParseStringIntoStruct(const char* c);
+void ParseCommands();
 // Next 2 functions taken from https://wiki.openssl.org/index.php/Simple_TLS_Server
 SSL_CTX *create_context();
 void configure_context(SSL_CTX *ctx, char* keyfname, char* certname);
@@ -64,6 +76,17 @@ enum paramflags
 int main(int argc, char **argv, char **envp)
 {
     int err = 0;
+    /*OpenDB("credentials.db", 0, DB_BTREE, &g_DB, &err);
+    DBC* cursor;
+    g_DB->cursor(g_DB, NULL, &cursor, 0);
+    DBT key, data;
+    memset(&key, 0, sizeof(DBT));
+    memset(&data, 0, sizeof(DBT));
+    while ((err = cursor->get(cursor, &key, &data, DB_NEXT)) == 0) {
+        printf_s("%s:%s", key.data, data.data);
+    }
+    cursor->close(cursor);
+    return 0;*/
     SetConsoleCtrlHandler(HandlerRoutine, TRUE);
     g_Clients = vector_create();
     g_Clients_SSL = vector_create();
@@ -132,6 +155,19 @@ int main(int argc, char **argv, char **envp)
     FILE* test = fopen(g_CredFname, "r");
     if(!test) if (!OpenDB(g_CredFname, DB_CREATE, DB_BTREE, &g_DB, &err)) return err;
     if(test) fclose(test);
+    //if(test) OpenDB("credentials.db", 0, DB_BTREE, &g_DB, &err);
+    //DBC* cursor;
+    //g_DB->cursor(g_DB, NULL, &cursor, 0);
+    //DBT key, data;
+    //memset(&key, 0, sizeof(DBT));
+    //memset(&data, 0, sizeof(DBT));
+    //while ((err = cursor->get(cursor, &key, &data, DB_NEXT)) == 0) {
+    //    ClientData c = *((ClientData*)data.data);
+    //    // store the data in a vector or hashmap (failed)
+    //    // ...
+    //    // I could just reload the permisions every iteration
+    //}
+    //cursor->close(cursor);
     CloseDB(g_DB);
     if(SSL_library_init() < 0)
     {
@@ -173,7 +209,7 @@ int main(int argc, char **argv, char **envp)
         fprintf(stderr, "bind : %d", err);
         return err;
     }
-    printf("Listening on port %d!\n", port);
+    printf("Listening on port %d!\nProtocol Version is : 0x%02x\n", port, PROTOCOL_VERSION);
     if(listen(g_ServerSocket, SOMAXCONN) == SERROR)
     {
         err = WSAGetLastError();
@@ -182,6 +218,8 @@ int main(int argc, char **argv, char **envp)
     }
     int i = 0;
     int cAddrLen = sizeof g_ClientAddress;
+    auto threadHandle1 = _beginthread(ParseCommands, 0, NULL);
+    CloseHandle(threadHandle1);
     while(true)
     {
         g_ClientSocket = accept(g_ServerSocket, &g_ClientAddress, &cAddrLen);
@@ -213,7 +251,6 @@ void ClientHandler()
     DB* db = NULL;
     int index = vector_size(g_Clients_SSL);
     int uIndex = 0;
-    char* buf = calloc(512, sizeof(char));
     int ret = 0, err = 0;
     puts("Client connected!");
     ret = SSL_accept(ssl);
@@ -222,9 +259,41 @@ void ClientHandler()
         err = SSL_get_error(ssl, ret);
         printf("SSL_accept failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
         shutdown(thisClient, SD_BOTH);
-        goto end;
+        ExitThread(err);
     }
-    puts("SSL initalized!\nOpening database!\n");
+    puts("SSL initalized!\nChecking Client Protocol Version!");
+    int cProtVer = 0;
+    ret = SSL_read(ssl, &cProtVer, sizeof(int)); // gets protocol version
+    if (ret <= 0)
+    {
+        err = SSL_get_error(ssl, ret);
+        printf("SSL_read failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
+        if (err == SSL_ERROR_SYSCALL)
+        {
+            err = WSAGetLastError();
+            if (err == 0)
+                perror("err = SSL_ERROR_SYSCALL ");
+            else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+            ExitThread(err);
+        }
+        shutdown(thisClient, SD_BOTH);
+        ExitThread(err);
+    }
+    cProtVer = ntohs(cProtVer);
+    if (cProtVer < PROTOCOL_VERSION)
+    {
+        printf_s("Error! Client is outdated! Error code: %lld\n", ERROR_CLIENT_VERSION_OUTDATED);
+        SSL_write(ssl, "CHAT_ERROR_CLIENT_VERSION_OUTDATED", 34);
+        ExitThread(ERROR_CLIENT_VERSION_OUTDATED);
+    }
+    else if (cProtVer > PROTOCOL_VERSION)
+    {
+        printf_s("Error! Server is outdated or the client is using a higher version that doesn't exist! Error code: %lld\n", ERROR_SERVER_VERSION_OUTDATED);
+        SSL_write(ssl, "CHAT_ERROR_SERVER_VERSION_OUTDATED", 34);
+        ExitThread(ERROR_SERVER_VERSION_OUTDATED);
+    }
+    SSL_write(ssl, "CHAT_PROTOCOL_VERSION_MATCH", 28);
+    puts("Protocol Version Matched!");
     if (!OpenDB("credentials.db", 0, DB_BTREE, &db, &err))
     {
         printf_s("Error! Cannot open database! Error code : %d! See https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbopen.html for more info!\n", err);
@@ -233,8 +302,16 @@ void ClientHandler()
     bool signedIn = false, joinedMsg = false;
     puts("Opening chatlog");
     FILE* chatlog = fopen("chatlog.log", "a");
-    char* username = calloc(128, sizeof(char));
+    puts("Done!");
+    char* username = calloc(129, sizeof(char));
+    char* buf = calloc(512, sizeof(char));
+    char* cliDat = calloc(256, sizeof(char));
     size_t msgSize = 512;
+    ClientData c, c2;
+    memset(&c , 0, sizeof(ClientData));
+    memset(&c2, 0, sizeof(ClientData));
+    char* perm_str = calloc(7, sizeof(char));
+    strcpy_s(perm_str, 7, "NORMAL");
     while(true)
     {
         memset(buf, '\0', 512);
@@ -262,7 +339,7 @@ void ClientHandler()
                 continue;
             }
             signedIn = true;
-            char* pwd  = calloc(256, sizeof(char));
+            char* pwd = calloc(256, sizeof(char));
             char* hash = calloc(256, sizeof(char));
             // receive username
             ret = SSL_read(ssl, username, 128);
@@ -303,29 +380,30 @@ void ClientHandler()
             SecureZeroMemory(pwd, 256);
             free(pwd);
             bool contains = false;
-            if(!ContainsKey(db, username, 256, &contains, &err))
-            { 
+            if (!ContainsKey(db, username, 256, &contains, &err))
+            {
                 printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbget.html to find out what the error code means!\n", err);
                 break;
             }
-            char* truePassword = calloc(256, sizeof(char));
-            int len = 255;
-            if(contains) 
-                if (!ReadDB(username, truePassword, &len, db, &err))
+            int len = 256;
+            char* str = calloc(256, sizeof(char));
+            if (contains)
+                if (!ReadDB(username, str, &len, db, &err))
                 {
                     printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbget.html to find out what the error code means!\n", err);
                     break;
                 }
+            c = ParseStringIntoStruct(str);
             if (!contains)
             {
                 SSL_write(ssl, "CHAT_PROTOCOL_DOESNT_EXIST", 26);
                 shutdown(thisClient, SD_BOTH);
                 free(hash);
-                SecureZeroMemory(truePassword, 256);
+                SecureZeroMemory(&c, sizeof(c));
                 err = ERROR_FILE_NOT_FOUND;
                 break;
             }
-            else if(stricmp(hash, truePassword) == 0) 
+            else if (stricmp(hash, c.password) == 0)
             {
                 SSL_write(ssl, "CHAT_PROTOCOL_AUTHENTICATED", 27);
             }
@@ -335,14 +413,47 @@ void ClientHandler()
                 shutdown(thisClient, SD_BOTH);
                 SecureZeroMemory(hash, 256);
                 free(hash);
-                SecureZeroMemory(truePassword, 256);
-                free(truePassword);
+                SecureZeroMemory(&c, sizeof(c));
                 err = ERROR_ACCESS_DENIED;
                 break;
             }
             free(hash);
-            SecureZeroMemory(truePassword, 256);
-            free(truePassword);
+            switch (c.permmissions)
+            {
+            case perm_mute:
+                strcpy(perm_str, "MUTE");
+                break;
+            case perm_normal:
+                strcpy(perm_str, "NORMAL");
+                break;
+            case perm_all:
+                strcpy(perm_str, "OP");
+                break;
+            default:
+                break;
+            }
+            if (!c.hasJoinedTwice) 
+            {
+                c.hasJoinedTwice = true;
+                int l = 0;
+                const char* toWrite = ParseStructIntoString(c, &l);
+                if (!DeleteKey(db, username, &err))
+                {
+                    printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbdel.html to find out what the error code means!\n", err);
+                    free(toWrite);
+                    break;
+                }
+                if (!WriteDB(username, toWrite, l, db, 0, &err))
+                {
+                    printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbput.html to find out what the error code means!\n", err);
+                    free(toWrite);
+                    break;
+                }
+                db->sync(db, 0);
+                free(toWrite);
+            }
+            SecureZeroMemory(c.password, strlen(c.password));
+            free(c.password);
             msgSize += (strlen(buf) + 2);
             int sz = strlen(username) + 22;
             char* joinMsg = calloc(sz, sizeof(char));
@@ -350,9 +461,8 @@ void ClientHandler()
             EchoMessage(joinMsg, sz);
             printf_s("%s\n", joinMsg);
             fprintf_s(chatlog, "%s\n", joinMsg);
-            CloseDB(db);
-            fflush(chatlog);
             free(joinMsg);
+            fflush(chatlog);
             joinedMsg = true;
             continue;
         }
@@ -408,16 +518,25 @@ void ClientHandler()
                 printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbget.html to find out what the error code means!\n", err);
                 break;
             }
+            int len = sizeof(ClientData);
+            memset(&c, 0, len);
+            c.password = hash;
+            c.hasJoinedTwice = false;
+            c.permmissions = perm_normal;
+            int l = 0;
+            const char* parsed = ParseStructIntoString(c, &l);
             if (contains)
             {
                 SSL_write(ssl, "CHAT_PROTOCOL_ALREADY_EXISTS", 28);
                 break;
             }
-            if (!WriteDB(username, hash, db, DB_NOOVERWRITE, &err))
+            if (!WriteDB(username, parsed, l, db, DB_NOOVERWRITE, &err))
             {
                 printf_s("Error while writing to the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbput.html to find out what the error code means!\n", err);
                 break;
             }
+            SecureZeroMemory(c.password, l);
+            free(c.password);
             int sz = strlen(username) + 10;
             char* joinMsg = calloc(sz, sizeof(char));
             sprintf_s(joinMsg, sz, "Welcome %s!", username);
@@ -426,9 +545,173 @@ void ClientHandler()
             fprintf_s(chatlog, "%s\n", joinMsg);
             fflush(chatlog);
             free(joinMsg);
+            free(parsed);
             joinedMsg = true;
-            CloseDB(db);
-            db = NULL;
+            db->sync(db, 0);
+            continue;
+        }
+        else if (_stricmp(buf, "CHAT_PROTOCOL_REMOVE") == 0 && signedIn /*to make sure that a hacked client doesn't send the message to crash the server*/)
+        {
+            char* pwd = calloc(256, 1);
+            char* truePwd = calloc(256, 1);
+            char* hash = calloc(256, 1);
+            ret = SSL_read(ssl, pwd, 255);
+            if (ret <= 0)
+            {
+                err = SSL_get_error(ssl, ret);
+                printf("SSL_read failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
+                if (err == SSL_ERROR_SYSCALL)
+                {
+                    err = WSAGetLastError();
+                    if (err == 0)
+                        perror("err = SSL_ERROR_SYSCALL");
+                    else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+                    break;
+                }
+                shutdown(thisClient, SD_BOTH);
+                free(truePwd);
+                free(hash);
+                free(pwd);
+                break;
+            }
+            argon2id_hash_encoded(2, (1 << 16), 2, pwd, strlen(pwd), g_Salt, 32, 96, hash, 255);
+            SecureZeroMemory(pwd, 256);
+            free(pwd);
+            int len = 255;
+            if (!ReadDB(username, truePwd, &len, db, &err))
+            {
+                printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbget.html to find out what the error code means!\n", err);
+                free(truePwd);
+                free(hash);
+                free(pwd);
+                break;
+            }
+            c = ParseStringIntoStruct(truePwd);
+            if (_stricmp(hash, c.password) == 0)
+            {
+                SSL_write(ssl, "CHAT_PROTOCOL_AUTHENTICATED", 27);
+                DeleteKey(db, username, &err);
+                SSL_shutdown(ssl);
+                shutdown(thisClient, SD_BOTH);
+                SecureZeroMemory(c.password, 256);
+                free(c.password);
+                free(truePwd);
+                free(hash);
+                free(pwd);
+                break;
+            }
+            else
+            {
+                SSL_write(ssl, "CHAT_PROTOCOL_INVALID_PASSWORD", 30);
+                SecureZeroMemory(c.password, 256);
+                free(c.password);
+                free(truePwd);
+                free(hash);
+                free(pwd);
+                continue;
+            }
+        }
+        else if (_stricmp(buf, "CHAT_PROTOCOL_CHANGE_PWD") == 0 && signedIn)
+        {
+            char *pwd, *data, *hash;
+            pwd = calloc(256, sizeof(char));
+            data = calloc(256, sizeof(char));
+            hash = calloc(256, sizeof(char));
+            ret = SSL_read(ssl, pwd, 255);
+            if (ret <= 0)
+            {
+                err = SSL_get_error(ssl, ret);
+                printf("SSL_read failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
+                if (err == SSL_ERROR_SYSCALL)
+                {
+                    err = WSAGetLastError();
+                    if (err == 0)
+                        perror("err = SSL_ERROR_SYSCALL");
+                    else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+                    break;
+                }
+                shutdown(thisClient, SD_BOTH);
+                free(hash);
+                free(data);
+                free(pwd);
+                break;
+            }
+            argon2id_hash_encoded(2, (1 << 16), 2, pwd, strlen(pwd), g_Salt, 32, 96, hash, 255);
+            SecureZeroMemory(pwd, 256);
+            int len = 255;
+            if (!ReadDB(username, data, &len, db, &err))
+            {
+                printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbget.html to find out what the error code means!\n", err);
+                free(hash);
+                free(data);
+                free(pwd);
+                break;
+            }
+            c = ParseStringIntoStruct(data);
+            free(data);
+            data = NULL;
+            if (_stricmp(c.password, hash) == 0)
+            {
+                SSL_write(ssl, "CHAT_PROTOCOL_AUTHENTICATED", 28);
+            }
+            else
+            {
+                SSL_write(ssl, "CHAT_PROTOCOL_INVALID_PASSWORD", 31);
+                continue;
+            }
+            // the new password
+            ret = SSL_read(ssl, pwd, 255);
+            if (ret <= 0)
+            {
+                err = SSL_get_error(ssl, ret);
+                printf("SSL_read failed! Check OpenSSL's documentation for more info on this error. Error code: %d, Line : %d\n", err, __LINE__);
+                if (err == SSL_ERROR_SYSCALL)
+                {
+                    err = WSAGetLastError();
+                    if (err == 0)
+                        perror("err = SSL_ERROR_SYSCALL");
+                    else printf("err = SSL_ERROR_SYSCALL WSAGetLastError is : %d\n", err);
+                    break;
+                }
+                shutdown(thisClient, SD_BOTH);
+                free(c.password);
+                free(hash);
+                free(data);
+                free(pwd);
+                break;
+            }
+            argon2id_hash_encoded(2, (1 << 16), 2, pwd, strlen(pwd), g_Salt, 32, 96, hash, 255);
+            SecureZeroMemory(pwd, 256);
+            free(pwd); // we needed pwd for longer but now we can free it
+            pwd = NULL;
+            SecureZeroMemory(c.password, 256);
+            for (int i = 0; i < strlen(hash); i++) c.password[i] = hash[i];
+            data = ParseStructIntoString(c, &len);
+            free(c.password);
+            c.password = NULL;
+            if (!DeleteKey(db, username, &err))
+            {
+                printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbdel.html to find out what the error code means!\n", err);
+                free(c.password);
+                free(hash);
+                free(data);
+                free(pwd);
+                break;
+            }
+            if (!WriteDB(username, data, len, db, 0, &err))
+            {
+                printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbput.html to find out what the error code means!\n", err);
+                free(c.password);
+                free(hash);
+                free(data);
+                free(pwd);
+                break;
+            }
+            db->sync(db, 0);
+            free(c.password);
+            free(hash);
+            free(data);
+            free(pwd);
             continue;
         }
         else if (_stricmp(buf, "CHAT_PROTOCOL_SHUTDOWN") == 0)
@@ -463,12 +746,46 @@ void ClientHandler()
             shutdown(thisClient, SD_BOTH);
             break;
         }
+        int len = 0xFF;
+        CloseDB(db);
+        if (!OpenDB("credentials.db", 0, DB_BTREE, &db, &err))
+        {
+            printf_s("Error! Cannot open database! Error code : %d! See https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbopen.html for more info!\n", err);
+            ExitThread(err);
+        }
+        if (!ReadDB(username, cliDat, &len, db, &err))
+        {
+            printf_s("Error while reading from the database! Error code : %d.\nGo to https://docs.oracle.com/cd/E17276_01/html/api_reference/C/dbget.html to find out what the error code means!\n", err);
+            break;
+        }
+        c2 = ParseStringIntoStruct(cliDat);
+        if (c2.permmissions != c.permmissions)
+        {
+            c.permmissions = c2.permmissions;
+            switch (c.permmissions)
+            {
+            case perm_mute:
+                strcpy(perm_str, "MUTE");
+                break;
+            case perm_normal:
+                strcpy(perm_str, "NORMAL");
+                break;
+            case perm_all:
+                strcpy(perm_str, "OP");
+                break;
+            default:
+                break;
+            }
+        }
+        SecureZeroMemory(c2.password, 256);
+        free(c2.password);
+        memset(&c2, 0, sizeof(ClientData));
         char* msg = calloc(msgSize, sizeof(char));
         sprintf_s(msg, msgSize, "[%s] %s", username, buf);
         // Send it to all the clients
-        EchoMessage(msg, strlen(msg));
-        printf_s("%s\n", msg);
-        fprintf_s(chatlog, "%s\n", msg);
+        if(c.permmissions != perm_mute) EchoMessage(msg, strlen(msg));
+        printf_s("[%s] %s\n", perm_str, msg);
+        fprintf_s(chatlog, "[%s] %s\n", perm_str, msg);
         fflush(chatlog);
         free(msg);
     }
@@ -484,20 +801,27 @@ end:
         puts("Whoops! I tried to access an invalid memory address.");
     }
     g_ClientCount--;
-    puts("Closed connection to client!");
     if (strlen(username) != 0 && joinedMsg)
     {
         msgSize = strlen(username) + 19;
         char* msg = calloc(msgSize, sizeof(char));
         sprintf_s(msg, msgSize, "%s has left the chat", username);
         EchoMessage(msg, msgSize);
+        printf_s("%s\n", msg);
         fprintf_s(chatlog, "%s\n", msg);
         fflush(chatlog);
         free(msg);
     }
+    puts("Closed connection to client!\nFreeing Allocated Buffer!");
     free(buf);
     free(username);
+    free(cliDat);
+    free(perm_str);
+    puts("Closing the chatlog!");
     fclose(chatlog);
+    puts("Closing the Database!");
+    CloseDB(db);
+    printf_s("Exiting Thread with code : %d", err);
     ExitThread(err);
 }
 void EchoMessage(const void* buffer, int sizeInBytes)
@@ -636,7 +960,7 @@ void GetSaltFromFile(FILE* stream)
     while (true)
     {
         sNum = getline(stream, &len);
-        if (sNum == NULL || strlen(sNum) == 0) { free(sNum); break; }// if eof
+        if (sNum == NULL || strlen(sNum) == 0) { free(sNum); break; } // if eof
         g_Salt[i] = atoi(sNum);
         free(sNum);
         i++;
@@ -692,8 +1016,8 @@ BOOL WINAPI HandlerRoutine(__in DWORD dwCtrlType)
     done:
         printf("Closed Connections!\nClosing database 'credentials.db'!");
         printf("Done! Closing now.");
-        ExitProcess(0);
-        return TRUE;
+        ExitProcess(errno);
+        return TRUE; // shouldn't ever be hit
     case CTRL_BREAK_EVENT:
         printf("Received ctrl+break! Closing connections with all clients...");
         if (g_ClientCount == 0) goto done1;
@@ -705,8 +1029,8 @@ BOOL WINAPI HandlerRoutine(__in DWORD dwCtrlType)
         done1:
         printf("Closed Connections!\nClosing database 'credentials.db'!");
         printf("Done! Closing now.");
-        ExitProcess(0);
-        return TRUE;
+        ExitProcess(errno);
+        return TRUE; // shouldn't ever be hit
     case CTRL_CLOSE_EVENT:
         printf("Received close signal! Shuting down connections with all clients...");
         if (g_ClientCount == 0) goto done2;
@@ -716,12 +1040,128 @@ BOOL WINAPI HandlerRoutine(__in DWORD dwCtrlType)
             shutdown(g_Clients[i], SD_BOTH);
         }
     done2:
-        printf("Closed Connections!\nClosing database 'credentials.db'!");
+        printf("Closed Connections!\nClosing database 'credentials.db'!\n");
         printf("Done! Closing now.");
-        ExitProcess(0);
-        return TRUE;
+        ExitProcess(errno);
+        return TRUE; // shouldn't ever be hit
     default:
         break;
     }
     return FALSE;
+}
+
+void ParseCommands()
+{
+    char* command = calloc(256, sizeof(char));
+    char* subCommand = calloc(256, sizeof(char));
+    int err = 0;
+    DWORD numread = 0;
+    while (true)
+    {
+        memset(command, 0, 256);
+        memset(subCommand, 0, 256);
+        ReadConsoleA(GetStdHandle(STD_INPUT_HANDLE), command, 255, &numread, NULL);
+        command[strlen(command) - 2] = 0;
+        for (int i = 0; i < strlen(command) && command[i] != ' '; i++)
+        {
+            subCommand[i] = command[i];
+        }
+        if (_stricmp(subCommand, "/stop") == 0)
+        {
+            _set_errno(0);
+            HandlerRoutine(CTRL_CLOSE_EVENT); // call the callback function to end the program
+        }
+        else if (_stricmp(subCommand, "/incperm") == 0) // increments the permission level
+        {
+            char* target = strstr(command, " ") + 1;
+            if (target == 0x01) continue;
+            DB* db = NULL;
+            if (!OpenDB("credentials.db", 0, DB_BTREE, &db, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            int len = 256;
+            char* data = calloc(len, sizeof(char));
+            bool contains = false;
+            if (!ContainsKey(db, target, 256, &contains, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            if (!contains) continue;
+            if (!ReadDB(target, data, &len, db, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            ClientData c = ParseStringIntoStruct(data);
+            c.permmissions++;
+            if (c.permmissions > 2) c.permmissions--;
+            memset(data, 0, 256);
+            free(data);
+            data = NULL;
+            int l = 0;
+            data = ParseStructIntoString(c, &l);
+            if (!DeleteKey(db, target, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            if (!WriteDB(target, data, strlen(data), db, 0, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            CloseDB(db);
+            free(data);
+            free(c.password);
+        }
+        else if(_stricmp(subCommand, "/decperm") == 0) // decrements the permission level
+        {
+            char* target = strstr(command, " ") + 1;
+            if (target == 0x01) continue;
+            DB* db = NULL;
+            if (!OpenDB("credentials.db", 0, DB_BTREE, &db, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            int len = 256;
+            char* data = calloc(len, sizeof(char));
+            bool contains = false;
+            if (!ContainsKey(db, target, 256, &contains, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            if (!contains) continue;
+            if (!ReadDB(target, data, &len, db, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            ClientData c = ParseStringIntoStruct(data);
+            c.permmissions--;
+            if (c.permmissions < 0) c.permmissions++;
+            memset(data, 0, 256);
+            free(data);
+            data = NULL;
+            int l = 0;
+            data = ParseStructIntoString(c, &l);
+            if (!DeleteKey(db, target, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            if (!WriteDB(target, data, strlen(data), db, 0, &err)) { _set_errno(err); HandlerRoutine(CTRL_CLOSE_EVENT); }
+            CloseDB(db);
+            free(data);
+            free(c.password);
+        }
+    }
+    free(subCommand);
+    free(command);
+}
+
+const char* ParseStructIntoString(ClientData c, int* len)
+{
+    // 8 + 2 + (strlen(c.password) + 1) + 3
+    *len = 10 + (strlen(c.password) + 2) + 1;
+    char* string = calloc(*len, sizeof(char));
+    sprintf_s(string, 10 + (strlen(c.password) + 2) + 1, "%s`%d`%d", c.password, c.permmissions, c.hasJoinedTwice);
+    return string;
+}
+
+ClientData  ParseStringIntoStruct(const char* c)
+{
+    ClientData cd;
+    memset(&cd, 0, sizeof(ClientData));
+    cd.password = calloc(256, sizeof(char));
+    char temp[16];
+    memset(temp, 0, 16);
+    int i = 0;
+    for (i = 0; i < strlen(c) && c[i] != '`'; i++)
+    {
+        cd.password[i] = c[i];
+    }
+    i++;
+    int ci = 0;
+    for (; i < strlen(c) && c[i] != '`'; i++)
+    {
+        temp[ci] = c[i];
+    }
+    cd.permmissions = atoi(temp);
+    memset(temp, 0, 16);
+    for (; i < strlen(c); i++)
+    {
+        temp[ci] = c[i];
+        ci++;
+    }
+    cd.hasJoinedTwice = atoi(temp + 1);
+    return cd;
 }

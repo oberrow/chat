@@ -577,6 +577,190 @@ int ProcMainLoop(int argc, char** argv)
 			break;
 		}
 	}
+		if (_stricmp(msg, "CHAT_PROTOCOL_ALREADY_EXISTS") == 0)
+		{
+			ret = wxMessageBox("Error! The account already exists!", "Error!", wxOK);
+			goto start;
+		}
+		break;
+	}
+	case authopt::del:
+	{
+		std::string uname, pwdS;
+		char* pwd = (char*)calloc(256, sizeof(char));
+		std::cout << "Enter your username!\n";
+		uname = ReadTextBox(textBox);
+		textBox->Clear();
+		textBox2->Clear();
+		std::cout << "Enter your password!\n";
+		pwdS = ReadTextBox(textBox);
+		textBox->Clear();
+		textBox2->Clear();
+		strcpy_s(pwd, 256, pwdS.c_str());
+		SecureZeroMemory((void*)pwdS.c_str(), pwdS.length());
+		pwdS.~basic_string();
+		SSL_write(serverSSL, "CHAT_PROTOCOL_SIGNIN", 20);
+		SSL_write(serverSSL, uname.c_str(), uname.length());
+		SSL_write(serverSSL, pwd, strlen(pwd));
+		SecureZeroMemory((char*)uname.c_str(), uname.length());
+		ret = SSL_read(serverSSL, msg, 512);
+		if (ret <= 0)
+		{
+			err = SSL_get_error(serverSSL, ret);
+			std::stringstream ss;
+			ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
+			wxMessageBox(ss.str(), "Error!", wxOK);
+			free(msg);
+			SSL_shutdown(serverSSL);
+			shutdown(serverSocket, SD_BOTH);
+			closesocket(serverSocket);
+			int lasterr = WSAGetLastError();
+			end = true;
+			if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
+				return err;
+			else ExitThread(err);
+		}
+		if (_stricmp(msg, "CHAT_PROTOCOL_INVALID_PASSWORD") == 0)
+		{
+			wxMessageBox("Error! You were not authenticated to sign in to this account!", "Error!", wxOK);
+			free(msg);
+			free(pwd);
+			free(username);
+			return 1;
+		}
+		else if (_stricmp(msg, "CHAT_PROTOCOL_DOESNT_EXIST") == 0)
+		{
+			wxMessageBox("Error! That account does not exist!", "Error!", wxOK);
+			free(msg);
+			free(pwd);
+			free(username);
+			return 1;
+		}
+		SSL_write(serverSSL, "CHAT_PROTOCOL_REMOVE", 20);
+		SSL_write(serverSSL, pwd, strlen(pwd));
+		ret = SSL_read(serverSSL, msg, 512);
+		if (ret <= 0)
+		{
+			err = SSL_get_error(serverSSL, ret);
+			std::stringstream ss;
+			ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
+			wxMessageBox(ss.str(), "Error!", wxOK);
+			free(msg);
+			SSL_shutdown(serverSSL);
+			shutdown(serverSocket, SD_BOTH);
+			closesocket(serverSocket);
+			int lasterr = WSAGetLastError();
+			end = true;
+			if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
+				return err;
+			else ExitThread(err);
+		}
+		if (_stricmp(msg, "CHAT_PROTOCOL_INVALID_PASSWORD") == 0)
+		{
+			wxMessageBox("Error! You were not authenticated to delete this account!", "Error!", wxOK);
+			free(msg);
+			free(username);
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+		SecureZeroMemory(pwd, strlen(pwd));
+		free(pwd);
+		goto end;
+		break;
+	}
+	case authopt::change:
+	{
+		std::string uname, pwdS, newPwdS;
+		char* pwd = (char*)calloc(256, sizeof(char));
+		char* newPwd = (char*)calloc(256, sizeof(char));
+		std::cout << "Enter your username!\n";
+		uname = ReadTextBox(textBox);
+		textBox->Clear();
+		textBox2->Clear();
+		std::cout << "Enter your password!\n";
+		pwdS = ReadTextBox(textBox);
+		textBox->Clear();
+		textBox2->Clear();
+		std::cout << "Enter the new password!\n";
+		newPwdS = ReadTextBox(textBox);
+		textBox->Clear();
+		textBox2->Clear();
+		strcpy_s(pwd, 256, pwdS.c_str());
+		SecureZeroMemory((void*)pwdS.c_str(), pwdS.length());
+		pwdS.~basic_string();
+		strcpy_s(newPwd, 256, newPwdS.c_str());
+		SecureZeroMemory((void*)newPwdS.c_str(), newPwdS.length());
+		newPwdS.~basic_string();
+		SSL_write(serverSSL, "CHAT_PROTOCOL_SIGNIN", 20);
+		SSL_write(serverSSL, uname.c_str(), uname.length());
+		SSL_write(serverSSL, pwd, strlen(pwd));
+		SecureZeroMemory((char*)uname.c_str(), uname.length());
+		ret = SSL_read(serverSSL, msg, 512);
+		if (ret <= 0)
+		{
+			err = SSL_get_error(serverSSL, ret);
+			std::stringstream ss;
+			ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
+			wxMessageBox(ss.str(), "Error!", wxOK);
+			free(msg);
+			SSL_shutdown(serverSSL);
+			shutdown(serverSocket, SD_BOTH);
+			closesocket(serverSocket);
+			int lasterr = WSAGetLastError();
+			end = true;
+			if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
+				return err;
+			else ExitThread(err);
+		}
+		if (_stricmp(msg, "CHAT_PROTOCOL_INVALID_PASSWORD") == 0)
+		{
+			wxMessageBox("Error! You were not authenticated to sign in to this account!", "Error!", wxOK);
+			free(msg);
+			free(username);
+			return 1;
+		}
+		else if (_stricmp(msg, "CHAT_PROTOCOL_DOESNT_EXIST") == 0)
+		{
+			wxMessageBox("Error! That account does not exist!", "Error!", wxOK);
+			free(msg);
+			free(username);
+			return 1;
+		}
+		SSL_write(serverSSL, "CHAT_PROTOCOL_CHANGE_PWD", 25);
+		SSL_write(serverSSL, pwd, strlen(pwd));
+		SSL_write(serverSSL, newPwd, strlen(newPwd));
+		ret = SSL_read(serverSSL, msg, 512);
+		if (ret <= 0)
+		{
+			err = SSL_get_error(serverSSL, ret);
+			std::stringstream ss;
+			ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
+			wxMessageBox(ss.str(), "Error!", wxOK);
+			free(msg);
+			SSL_shutdown(serverSSL);
+			shutdown(serverSocket, SD_BOTH);
+			closesocket(serverSocket);
+			int lasterr = WSAGetLastError();
+			end = true;
+			if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
+				return err;
+			else ExitThread(err);
+		}
+		if (_stricmp(msg, "CHAT_PROTOCOL_INVALID_PASSWORD") == 0)
+		{
+			wxMessageBox("Error! You were not authenticated to sign in to this account!", "Error!", wxOK);
+			free(msg);
+			free(username);
+			return 1;
+		}
+		break;
+	}
+	default:
+		break;
+	}
 	end:
 	pingMessage.append(username);
 	free(username);
