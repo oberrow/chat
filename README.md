@@ -1,6 +1,6 @@
 # Description
 chat server coded in c
-<br>chat client coded in c++
+<br>chat client coded in c++ using wxWidgets
 # How to use
 ## Server:<br></br>
 Open a command prompt window in the directory that chat_server is in
