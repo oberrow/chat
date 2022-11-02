@@ -65,4 +65,9 @@ If the sign up suceeds no message will be sent by the server.
 Otherwise, an error message is sent.
 `CHAT_PROTOCOL_ALREADY_EXISTS` is sent when the account you are attempting to create already exists.
 ## Other info about the protocol will be listed below
-<br>...
+## Format: MSG -> RESPONSE(s) -> Parameter(s) -> Notes
+<br>CHAT_PROTOCOL_SHUTDOWN        -> No Response -> No Parameters -> Shut's down the connection allowing no communication
+<br>CHAT_PROTOCOL_WHOAMI          -> Connected Client Username -> No Parameters -> N.A.
+<br>CHAT_PROTOCOL_LISTONLINEUSERS -> Loops through all the connected clients username and sends them one by one -> No Parameters -> N.A.
+<br>CHAT_PROTOCOL_REMOVE          -> CHAT_PROTOCOL_AUTHENTICATED, CHAT_PROTOCOL_INVALID_PASSWORD -> client password -> It will close the connection once the deletion completed sucessfully.
+<br>CHAT_PROTOCOL_CHANGE_PWD      -> CHAT_PROTOCOL_AUTHENTICATED, CHAT_PROTOCOL_INVALID_PASSWORD -> client password -> Unlike CHAT_PROTOCOL_REMOVE it will keep the connection open once it's done changing the password. If there are other accounts currently signed in then it will not kick them
