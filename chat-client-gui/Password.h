@@ -17,7 +17,7 @@ namespace pwd
 		Password(const char* package, const char* service, const char* username, const char* password, error* err);
 		bool Init(char* username, char* password, error* err);
 		bool Init(char* username);
-		const char* Get(error* err);
+		bool Get(char* pwd, int maxBufSize, error* err);
 		void Delete(error* err);
 
 		~Password();

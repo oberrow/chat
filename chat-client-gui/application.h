@@ -24,15 +24,21 @@ extern wxTextCtrl	 * textBox2;
 extern wxBitmapButton* button1;
 extern bool end;
 
+// The client is outdated
+constexpr auto ERROR_CLIENT_VERSION_OUTDATED = -60000i64;
+// The server is outdated
+constexpr auto ERROR_SERVER_VERSION_OUTDATED = -60001i64;
+
 enum
 {
 	CLOSE_CONN = 1,
 	CONNECT,
-	BUTTONPRESS
+	BUTTONPRESS,
+	OPENGITHUB_PAGE
 };
 
 void OnPress(wxCommandEvent& event);
-int  ProcMainLoop(int argc, char** argv);
+int  ProcMainLoop(int argc, char** argv, char** envp);
 void InvokeMainLoop();
 SSL_CTX* create_context();
 std::string ReadTextBox(wxTextCtrl* textbox, char delim = '\n');
@@ -45,6 +51,7 @@ private:
 	wxDECLARE_EVENT_TABLE();
 	void OnExit(wxCommandEvent& event);
 	void OnAbout(wxCommandEvent& event);
+	void OnGithubPage(wxCommandEvent& event);
 	void OnConnect(wxCommandEvent& event);
 	void OnCloseConnect(wxCommandEvent& event);
 	void OnPress(wxCommandEvent& event);
@@ -52,11 +59,12 @@ private:
 
 #if !defined(NO_EVENT_DEFINE)
 wxBEGIN_EVENT_TABLE(Frame, wxFrame)
-EVT_MENU  (wxID_EXIT  , Frame::OnExit)
-EVT_MENU  (wxID_ABOUT , Frame::OnAbout)
-EVT_MENU  (CLOSE_CONN , Frame::OnCloseConnect)
-EVT_MENU  (CONNECT    , Frame::OnConnect)
-EVT_BUTTON(BUTTONPRESS, Frame::OnPress)
+EVT_MENU  (wxID_EXIT	   , Frame::OnExit)
+EVT_MENU  (wxID_ABOUT	   , Frame::OnAbout)
+EVT_MENU  (CLOSE_CONN	   , Frame::OnCloseConnect)
+EVT_MENU  (CONNECT		   , Frame::OnConnect)
+EVT_MENU  (OPENGITHUB_PAGE , Frame::OnGithubPage)
+EVT_BUTTON(BUTTONPRESS	   , Frame::OnPress)
 wxEND_EVENT_TABLE()
 #endif
 

@@ -37,24 +37,17 @@ namespace pwd
 		m_username = username;
 		return true;
 	}
-	const char* Password::Get(error* err)
+	bool Password::Get(char* pwd, int maxBufSize, error* err)
 	{
-		if (err->size == 0) return nullptr;
+		if (err->size == 0) return false;
 		auto password = keychain::getPassword(m_package, m_service, m_username, m_keyEc);
 		if (m_keyEc)
 		{
 			strcpy_s(err->errorMsg, err->size, m_keyEc.message.c_str());
 			err->ec = m_keyEc.code;
-			return nullptr;
+			return false;
 		}
-		keychain::setPassword(m_package, m_service, m_username, password, m_keyEc);
-		if (m_keyEc)
-		{
-			strcpy_s(err->errorMsg, err->size, m_keyEc.message.c_str());
-			err->ec = m_keyEc.code;
-			return nullptr;
-		}
-		return password.c_str();
+		strcpy_s(pwd, maxBufSize, password.c_str());
 	}
 	void Password::Delete(error* err)
 	{

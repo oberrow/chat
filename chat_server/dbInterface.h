@@ -29,6 +29,7 @@ bool OpenDB(
 bool WriteDB(
 	_In_  char* key,
 	_In_  char* data,
+	_In_  size_t size,
 	_In_  DB* db,
 	_In_  int flags,
 	_Out_ int* err);

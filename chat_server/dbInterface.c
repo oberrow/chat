@@ -39,6 +39,7 @@ bool OpenDB(
 bool WriteDB(
 	_In_  char* key,
 	_In_  char* data,
+	_In_  size_t size,
 	_In_  DB* db,
 	_In_  int flags,
 	_Out_ int* err)
@@ -50,7 +51,7 @@ bool WriteDB(
 	dbKey.size = strlen(key);
 
 	dbData.data = data;
-	dbData.size = strlen(data);
+	dbData.size = size;
 	*err = db->put(db, NULL, &dbKey, &dbData, flags);
 	return true;
 }

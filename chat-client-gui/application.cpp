@@ -9,9 +9,14 @@
 #include <dpapi.h>
 #include <keychain.h>
 #include <Windows.h>
+#include <shellapi.h>
 #include "Password.h"
 
 #line 14 "application.cpp"
+
+// Chat Protocol Version
+// Increments by one with every protocol change
+#define PROTOCOL_VERSION 0x02ui8
 
 #define SERROR INVALID_SOCKET
 constexpr const char* package = "com.chat-client.gui";
@@ -36,6 +41,14 @@ enum class signinopt
 	oldc,
 	newc,
 	addnewc
+};
+
+enum class authopt
+{
+	in,
+	up,
+	del,
+	change
 };
 
 bool chat_client_gui_cpp::OnInit()
@@ -142,6 +155,7 @@ Frame::Frame(const wxString& title, const wxPoint& pos, const wxSize& size)
 	menuServer->AppendSeparator();
 	wxMenu* menuHelp = new wxMenu;
 	menuHelp->Append(wxID_ABOUT);
+	menuHelp->Append(OPENGITHUB_PAGE, "Open Github Page");
 	wxMenuBar* menuBar = new wxMenuBar;
 	menuBar->Append(menuFile, "&File");
 	menuBar->Append(menuServer, "&Server");
@@ -236,6 +250,12 @@ void Frame::OnPress(wxCommandEvent& event)
 	::OnPress(event);
 	return;
 }
+
+void Frame::OnGithubPage(wxCommandEvent& event)
+{
+	ShellExecuteA(NULL, "open", "https://github.com/oberrow/chat/", NULL, NULL, SW_SHOWNORMAL);
+}
+
 void OnPress(wxCommandEvent& event)
 {
 	int ret{}, err{};
@@ -264,7 +284,7 @@ void OnPress(wxCommandEvent& event)
 
 void InvokeMainLoop()
 {
-	int mainResult = ::ProcMainLoop(__argc, __argv); // calls the main loop
+	int mainResult = ::ProcMainLoop(__argc, __argv, _get_initial_narrow_environment()); // calls the main loop
 	end = false;
 	ExitProcess(mainResult);
 }
@@ -285,7 +305,7 @@ SSL_CTX* create_context()
 	return ctx;
 }
 
-int ProcMainLoop(int argc, char** argv)
+int ProcMainLoop(int argc, char** argv, char** envp)
 {
 	int maxSize = 0;
 	int size = sizeof(int);
@@ -341,97 +361,76 @@ int ProcMainLoop(int argc, char** argv)
 		shutdown(serverSocket, SD_BOTH);
 		ExitThread(err);
 	}
+	int protVer = htons(PROTOCOL_VERSION);
+	ret = SSL_write(serverSSL, &protVer, sizeof(int));
+	if (ret <= 0)
+	{
+		err = SSL_get_error(serverSSL, ret);
+		std::stringstream ss;
+		ss << "Error! SSL_write has failed with exit code : " << err << " Line : " << __LINE__ << " File : " __FILE__;
+		wxMessageBox(ss.str(), "Error!", wxOK | wxICON_ERROR);
+		shutdown(serverSocket, SD_BOTH);
+		ExitThread(err);
+	}
+	char* msg = (char*)calloc(513, sizeof(char));
+	ret = SSL_read(serverSSL, msg, 512);
+	if (ret <= 0)
+	{
+		err = SSL_get_error(serverSSL, ret);
+		std::stringstream ss;
+		ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
+		wxMessageBox(ss.str(), "Error!", wxOK);
+		free(msg);
+		SSL_shutdown(serverSSL);
+		shutdown(serverSocket, SD_BOTH);
+		closesocket(serverSocket);
+		int lasterr = WSAGetLastError();
+		end = true;
+		if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
+			return err;
+		else ExitThread(err);
+	}
+	if (_stricmp(msg, "CHAT_ERROR_CLIENT_VERSION_OUTDATED") == 0)
+	{
+		wxMessageBox("Error! The client is outdated! Error: CHAT_ERROR_CLIENT_VERSION_OUTDATED", "Error!", wxOK);
+		ShellExecuteA(NULL, "open", "https://github.com/oberrow/chat/releases/latest", NULL, NULL, SW_SHOWNORMAL);
+		return ERROR_CLIENT_VERSION_OUTDATED;
+	}
+	else if (_stricmp(msg, "CHAT_ERROR_SERVER_VERSION_OUTDATED") == 0)
+	{
+		wxMessageBox("Error! The server is outdated! Error: CHAT_ERROR_CLIENT_VERSION_OUTDATED", "Error!", wxOK);
+		return ERROR_SERVER_VERSION_OUTDATED;
+	}
+	memset(msg, 0, 513);
 	std::string pingMessage = "@";
 	char* username = (char*)calloc(128, sizeof(char));
 	char* password = nullptr;
 	std::string opt1S;
-	bool opt1 = false;
-	std::cout << "Would you like to sign in or sign up? enter in for signing in and up for signing up.\n";
+	authopt opt1 = authopt::in;
+	std::cout << "Would you like to sign in, sign up or delete your account? enter in for signing in, up for signing up, del for deleting an account,\nchange pwd to change the password of an account.\n";
 	opt1S = ReadTextBox(textBox);
-	opt1 = (opt1S == "up") && opt1S != "in";
+	if (opt1S == "in") opt1 = authopt::in;
+	else if (opt1S == "up") opt1 = authopt::up;
+	else if (opt1S == "del") opt1 = authopt::del;
+	else if (opt1S == "change pwd") opt1 = authopt::change;
 	textBox->Clear();
 	textBox2->Clear();
-	char* msg = (char*)calloc(513, sizeof(char));
-	if (opt1)
+	switch (opt1)
 	{
-	start:
-		textBox->Clear();
-		textBox2->Clear();
-		std::cout << "Enter your username in the text box!";
-		std::string temp = ReadTextBox(textBox).c_str();
-		if (temp.length() > 127)
-		{
-			textBox->Clear();
-			textBox2->Clear();
-			if (wxMessageBox("Error! your username must be less then 128 characters long! Please try again.", "Error!", wxOK) == wxOK)
-				goto start;
-		}
-		strcpy_s(username, 127, temp.c_str());
-		textBox->Clear();
-		textBox2->Clear();
-		std::cout << "Enter your password!";
-		temp = ReadTextBox(textBox);
-		password = (char*)calloc(256, 1);
-		textBox->Clear();
-		if (temp.length() > 255)
-		{
-			textBox->Clear();
-			textBox2->Clear();
-			if (wxMessageBox("Error! Your password must be less then 256 characters long! Please try again.", "Error!", wxOK) == wxOK)
-				goto start;
-		}
-		strcpy_s(password, 255, temp.c_str());
-		textBox2->Clear();
-		SecureZeroMemory((char*)temp.c_str(), temp.length());
-		temp.~basic_string();
-		pwd::error ec{};
-		ec.size = 256;
-		ec.errorMsg = (char*)calloc(257, 1);
-		pwd::Password pswd{ package, service, username, password, &ec };
-		SSL_write(serverSSL, "CHAT_PROTOCOL_SIGNUP", 20);
-		SSL_write(serverSSL, username, strlen(username));
-		SSL_write(serverSSL, password, strlen(password));
-		std::ofstream{ "credentials_cli.txt" } << username;
-		SecureZeroMemory(password, 256);
-		free(password);
-		free(ec.errorMsg);
-		ret = SSL_read(serverSSL, msg, 512);
-		if (ret <= 0)
-		{
-			err = SSL_get_error(serverSSL, ret);
-			std::stringstream ss;
-			ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
-			wxMessageBox(ss.str(), "Error!", wxOK);
-			free(msg);
-			SSL_shutdown(serverSSL);
-			shutdown(serverSocket, SD_BOTH);
-			closesocket(serverSocket);
-			int lasterr = WSAGetLastError();
-			end = true;
-			if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
-				return err;
-			else ExitThread(err);
-		}
-		if (_stricmp(msg, "CHAT_PROTOCOL_ALREADY_EXISTS") == 0)
-		{
-			ret = wxMessageBox("Error! The account already exists!", "Error!", wxOK);
-			goto start;
-		}
-	}
-	else
+	case authopt::in:
 	{
-		thestartofsignin:
+	thestartofsignin:
 		signinopt nold = signinopt::newc; // old - false new - true
 		std::cout << "Would you like to use old credentials, new ones or save new ones (add new)?\n";
- 		std::string noldS = ReadTextBox(textBox);
+		std::string noldS = ReadTextBox(textBox);
 		if (noldS == "old")			 nold = signinopt::oldc;
 		else if (noldS == "add new") nold = signinopt::addnewc;
 		else if (noldS == "new")	 nold = signinopt::newc;
 		else
 		{
-			int s = wxMessageBox("Error! You didn't enter new old or \"add new\"", "Error!", wxOK);
+			int s = wxMessageBox("Error! You didn't enter new, old or \"add new\"", "Error!", wxOK);
 			textBox->Clear();
-			if(s == wxOK) goto thestartofsignin;
+			if (s == wxOK) goto thestartofsignin;
 		}
 		std::string sUname, sPassword;
 		pwd::Password pswd{ package, service };
@@ -443,8 +442,9 @@ int ProcMainLoop(int argc, char** argv)
 			ec.size = 256;
 			ec.errorMsg = (char*)calloc(257, 1);
 			std::getline(std::ifstream{ "credentials_cli.txt" }, uname);
+			password = (char*)calloc(257, sizeof(char));
 			pswd.Init((char*)uname.c_str());
-			password = (char*)pswd.Get(&ec);
+			pswd.Get(password, 256, &ec);
 			if (!password && ec.ec == ERROR_NOT_FOUND)
 			{
 				int state = wxMessageBox("Error! You don't have any accounts saved in the credentials manager!", "Error!", wxOK);
@@ -453,7 +453,8 @@ int ProcMainLoop(int argc, char** argv)
 			SSL_write(serverSSL, "CHAT_PROTOCOL_SIGNIN", 20);
 			SSL_write(serverSSL, uname.c_str(), uname.length());
 			SSL_write(serverSSL, password, strlen(password));
-			SecureZeroMemory(password, strlen(password) + 1);
+			SecureZeroMemory(password, 257);
+			free(password);
 			free(ec.errorMsg);
 			SSL_read(serverSSL, msg, 512);
 			if (_stricmp(msg, "CHAT_PROTOCOL_INVALID_PASSWORD") == 0)
@@ -470,7 +471,7 @@ int ProcMainLoop(int argc, char** argv)
 				free(username);
 				return 1;
 			}
-			free(ec.errorMsg);
+			goto end;
 			break;
 		case signinopt::newc:
 			textBox->Clear();
@@ -534,7 +535,6 @@ int ProcMainLoop(int argc, char** argv)
 			textBox2->Clear();
 			ec.size = 256;
 			ec.errorMsg = (char*)calloc(257, 1);
-			free(ec.errorMsg);
 			SSL_write(serverSSL, "CHAT_PROTOCOL_SIGNIN", 20);
 			SSL_write(serverSSL, sUname.c_str(), sUname.length());
 			SSL_write(serverSSL, sPassword.c_str(), sPassword.length());
@@ -571,12 +571,74 @@ int ProcMainLoop(int argc, char** argv)
 				free(username);
 				return 1;
 			}
+			pswd.Init(username, (char*)sPassword.c_str(), &ec);
+			free(ec.errorMsg);
 			goto end;
 			break;
 		default:
 			break;
 		}
 	}
+	case authopt::up:
+	{
+	start:
+		textBox->Clear();
+		textBox2->Clear();
+		std::cout << "Enter your username in the text box!";
+		std::string temp = ReadTextBox(textBox).c_str();
+		if (temp.length() > 127)
+		{
+			textBox->Clear();
+			textBox2->Clear();
+			if (wxMessageBox("Error! your username must be less then 128 characters long! Please try again.", "Error!", wxOK) == wxOK)
+				goto start;
+		}
+		strcpy_s(username, 127, temp.c_str());
+		textBox->Clear();
+		textBox2->Clear();
+		std::cout << "Enter your password!";
+		temp = ReadTextBox(textBox);
+		password = (char*)calloc(256, 1);
+		textBox->Clear();
+		if (temp.length() > 255)
+		{
+			textBox->Clear();
+			textBox2->Clear();
+			if (wxMessageBox("Error! Your password must be less then 256 characters long! Please try again.", "Error!", wxOK) == wxOK)
+				goto start;
+		}
+		strcpy_s(password, 255, temp.c_str());
+		textBox2->Clear();
+		SecureZeroMemory((char*)temp.c_str(), temp.length());
+		temp.~basic_string();
+		pwd::error ec{};
+		ec.size = 256;
+		ec.errorMsg = (char*)calloc(257, 1);
+		pwd::Password pswd{ package, service, username, password, &ec };
+		SSL_write(serverSSL, "CHAT_PROTOCOL_SIGNUP", 20);
+		SSL_write(serverSSL, username, strlen(username));
+		SSL_write(serverSSL, password, strlen(password));
+		std::ofstream{ "credentials_cli.txt" } << username;
+		SecureZeroMemory(password, 256);
+		free(password);
+		free(ec.errorMsg);
+		ret = SSL_read(serverSSL, msg, 512);
+		if (ret <= 0)
+		{
+			err = SSL_get_error(serverSSL, ret);
+			std::stringstream ss;
+			ss << "Error! SSL_read failed with exit code : " << err << "! Line : " << __LINE__ << " File : " << __FILE__;
+			wxMessageBox(ss.str(), "Error!", wxOK);
+			free(msg);
+			SSL_shutdown(serverSSL);
+			shutdown(serverSocket, SD_BOTH);
+			closesocket(serverSocket);
+			int lasterr = WSAGetLastError();
+			end = true;
+			if (connected && err != SSL_ERROR_ZERO_RETURN) // if you didn't disconnect and the server didn't disconnect
+				return err;
+			else ExitThread(err);
+		}
 		if (_stricmp(msg, "CHAT_PROTOCOL_ALREADY_EXISTS") == 0)
 		{
 			ret = wxMessageBox("Error! The account already exists!", "Error!", wxOK);
