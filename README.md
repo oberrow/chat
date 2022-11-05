@@ -34,7 +34,7 @@ Double Click chat_client_gui.exe
 <br>Config File Syntax:
 ```
 string ip = [server ip in numerical form]
-string theme = [dark|black]
+string theme = [dark|light]
 int port = [server port]
 ```
 # The Chat Protocol
